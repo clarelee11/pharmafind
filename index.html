@@ -1,0 +1,322 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+// It's necessary to include a QR code scanning library. 
+// This component assumes html5-qrcode is loaded, for example via a script tag:
+// <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+// Since we can't add it directly, we'll load it dynamically.
+
+const loadScannerScript = (callback) => {
+  const existingScript = document.getElementById('html5-qrcode-script');
+  if (!existingScript) {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    script.id = 'html5-qrcode-script';
+    document.body.appendChild(script);
+    script.onload = () => {
+      if (callback) callback();
+    };
+  } else {
+    if (callback) callback();
+  }
+};
+
+
+// Mock data for pharmacies and products, now with barcodes
+const PHARMACIES = {
+  '1': { name: 'Watsons', logo: 'https://placehold.co/100x100/e8e8e8/000000?text=Watsons' },
+  '2': { name: 'Guardian', logo: 'https://placehold.co/100x100/e8e8e8/000000?text=Guardian' },
+  '3': { name: 'Caring Pharmacy', logo: 'https://placehold.co/100x100/e8e8e8/000000?text=Caring' },
+  '4': { name: 'BIG Pharmacy', logo: 'https://placehold.co/100x100/e8e8e8/000000?text=BIG' },
+  '5': { name: 'AA Pharmacy', logo: 'https://placehold.co/100x100/e8e8e8/000000?text=AA' },
+  '6': { name: 'Alpro Pharmacy', logo: 'https://placehold.co/100x100/e8e8e8/000000?text=Alpro' },
+};
+
+const PRODUCTS = [
+  {
+    id: '1',
+    name: 'Panadol ActiFast',
+    category: 'Pain Relief',
+    barcode: '9556089011123',
+    image: 'https://placehold.co/150x150/e8e8e8/000000?text=Panadol',
+    prices: [
+      { pharmacyId: '1', price: 12.50 }, { pharmacyId: '2', price: 12.80 },
+      { pharmacyId: '3', price: 12.20 }, { pharmacyId: '4', price: 11.90 },
+    ],
+  },
+  {
+    id: '2',
+    name: 'Strepsils Honey & Lemon',
+    category: 'Sore Throat',
+    barcode: '5011417553583',
+    image: 'https://placehold.co/150x150/e8e8e8/000000?text=Strepsils',
+    prices: [
+      { pharmacyId: '1', price: 9.90 }, { pharmacyId: '2', price: 9.50 },
+      { pharmacyId: '3', price: 10.10 }, { pharmacyId: '5', price: 9.20 },
+    ],
+  },
+  {
+    id: '3',
+    name: 'Blackmores Vitamin C 500mg',
+    category: 'Vitamins',
+    barcode: '9300807297852',
+    image: 'https://placehold.co/150x150/e8e8e8/000000?text=Blackmores',
+    prices: [
+      { pharmacyId: '1', price: 35.00 }, { pharmacyId: '2', price: 34.50 },
+      { pharmacyId: '4', price: 33.90 }, { pharmacyId: '5', price: 34.00 },
+    ],
+  },
+  {
+    id: '4',
+    name: 'Cetaphil Gentle Skin Cleanser',
+    category: 'Skincare',
+    barcode: '3499320002227',
+    image: 'https://placehold.co/150x150/e8e8e8/000000?text=Cetaphil',
+    prices: [
+        { pharmacyId: '1', price: 45.50 }, { pharmacyId: '2', price: 46.00 },
+        { pharmacyId: '3', price: 44.90 },
+    ],
+  },
+  {
+    id: '5',
+    name: 'Scott\'s Emulsion Vita Orange',
+    category: 'Vitamins',
+    barcode: '8888627110123',
+    image: 'https://placehold.co/150x150/e8e8e8/000000?text=Scott\'s',
+    prices: [
+      { pharmacyId: '1', price: 22.50 }, { pharmacyId: '2', price: 21.90 },
+      { pharmacyId: '6', price: 22.00 },
+    ],
+  },
+  {
+    id: '6',
+    name: 'Huggies Dry Pants Super Jumbo',
+    category: 'Baby Care',
+    barcode: '9556019234567',
+    image: 'https://placehold.co/150x150/e8e8e8/000000?text=Huggies',
+    prices: [
+      { pharmacyId: '1', price: 48.90 }, { pharmacyId: '4', price: 47.50 },
+      { pharmacyId: '6', price: 49.00 },
+    ],
+  },
+];
+
+const fetchProducts = (query) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      if (!query) resolve(PRODUCTS);
+      const lowercasedQuery = query.toLowerCase();
+      const filteredProducts = PRODUCTS.filter(product =>
+        product.name.toLowerCase().includes(lowercasedQuery) ||
+        product.category.toLowerCase().includes(lowercasedQuery)
+      );
+      resolve(filteredProducts);
+    }, 500);
+  });
+};
+
+const ProductCard = ({ product, onPress }) => (
+  <div style={styles.card} onClick={onPress}>
+    <img src={product.image} style={styles.productImage} alt={product.name} />
+    <div style={styles.cardContent}>
+      <p style={styles.productName}>{product.name}</p>
+      <p style={styles.productCategory}>{product.category}</p>
+    </div>
+  </div>
+);
+
+const HomeScreen = ({ onProductSelect, onOpenScanner }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchProducts(searchQuery).then(data => {
+      setProducts(data);
+      setLoading(false);
+    });
+  }, [searchQuery]);
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <p style={styles.headerTitle}>MY PharmaFind</p>
+      </div>
+      <div style={styles.searchContainer}>
+        <input
+          style={styles.searchInput}
+          placeholder="Search for products or categories..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <button onClick={onOpenScanner} style={styles.scanButton}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+        </button>
+      </div>
+      {loading ? (
+        <div style={{textAlign: 'center', padding: 20}}>Loading...</div>
+      ) : (
+        <div style={styles.listContainer}>
+          {products.map(item => <ProductCard key={item.id} product={item} onPress={() => onProductSelect(item)} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ProductDetailsScreen = ({ product, onBack }) => {
+  const sortedPrices = [...product.prices].sort((a, b) => a.price - b.price);
+  return (
+    <div style={styles.container}>
+       <div style={{overflowY: 'auto', height: '100vh'}}>
+        <div style={styles.detailsHeader}>
+            <button onClick={onBack} style={styles.backButton}>&larr; Back</button>
+            <img src={product.image} style={styles.detailsImage} alt={product.name}/>
+            <p style={styles.detailsProductName}>{product.name}</p>
+            <p style={styles.detailsProductCategory}>{product.category}</p>
+        </div>
+        <div style={styles.priceListContainer}>
+            <p style={styles.priceListTitle}>Price Comparison</p>
+            {sortedPrices.map((item, index) => {
+                const pharmacy = PHARMACIES[item.pharmacyId];
+                return (
+                    <div key={index} style={{...styles.priceItem, ...(index === 0 && styles.bestPrice)}}>
+                        <img src={pharmacy.logo} style={styles.pharmacyLogo} alt={pharmacy.name} />
+                        <div style={styles.pharmacyInfo}><p style={styles.pharmacyName}>{pharmacy.name}</p></div>
+                        <p style={styles.priceText}>RM {item.price.toFixed(2)}</p>
+                        {index === 0 && <p style={styles.bestPriceLabel}>Best Price</p>}
+                    </div>
+                );
+            })}
+        </div>
+       </div>
+    </div>
+  );
+};
+
+const QRScanner = ({ onScanSuccess, onScanFailure, onClose }) => {
+    const readerRef = useRef(null);
+
+    useEffect(() => {
+        if (!window.Html5Qrcode) {
+            console.error("Scanner library not loaded!");
+            return;
+        }
+
+        const html5QrCode = new window.Html5Qrcode("reader");
+        const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+            html5QrCode.stop().then(() => {
+                onScanSuccess(decodedText);
+            }).catch(err => console.error("Failed to stop scanner", err));
+        };
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+        html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, onScanFailure)
+            .catch(err => {
+                console.error("Unable to start scanning.", err);
+                onScanFailure("Failed to start camera. Please grant permission.");
+            });
+        
+        readerRef.current = html5QrCode;
+
+        return () => {
+            if (readerRef.current && readerRef.current.isScanning) {
+                readerRef.current.stop().catch(err => console.error("Error stopping scanner on cleanup", err));
+            }
+        };
+    }, [onScanSuccess, onScanFailure]);
+
+    return (
+        <div style={styles.scannerOverlay}>
+            <div style={styles.scannerContainer}>
+                <div id="reader" style={{ width: '100%', maxWidth: '500px' }}></div>
+                <button onClick={onClose} style={styles.closeScannerButton}>Cancel</button>
+            </div>
+        </div>
+    );
+};
+
+export default function App() {
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [notification, setNotification] = useState('');
+  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+
+  useEffect(() => {
+      loadScannerScript(() => setIsScriptLoaded(true));
+  }, []);
+
+  const handleScanSuccess = (decodedText) => {
+      const foundProduct = PRODUCTS.find(p => p.barcode === decodedText);
+      setIsScannerOpen(false);
+      if (foundProduct) {
+          setSelectedProduct(foundProduct);
+      } else {
+          setNotification(`Product with barcode ${decodedText} not found.`);
+          setTimeout(() => setNotification(''), 3000);
+      }
+  };
+
+  const handleScanFailure = (error) => {
+      setNotification(error);
+      setTimeout(() => setNotification(''), 3000);
+      setIsScannerOpen(false);
+  };
+  
+  if (selectedProduct) {
+    return <ProductDetailsScreen product={selectedProduct} onBack={() => setSelectedProduct(null)} />;
+  }
+
+  return (
+    <div>
+        {isScannerOpen && isScriptLoaded && (
+            <QRScanner 
+                onScanSuccess={handleScanSuccess}
+                onScanFailure={handleScanFailure}
+                onClose={() => setIsScannerOpen(false)}
+            />
+        )}
+        <HomeScreen 
+            onProductSelect={setSelectedProduct} 
+            onOpenScanner={() => {
+                if(isScriptLoaded) setIsScannerOpen(true);
+                else setNotification("Scanner is loading, please wait...");
+            }} 
+        />
+        {notification && <div style={styles.notification}>{notification}</div>}
+    </div>
+  );
+}
+
+const styles = {
+  container: { fontFamily: 'sans-serif', backgroundColor: '#f8f9fa', minHeight: '100vh' },
+  header: { padding: 20, backgroundColor: '#ffffff', borderBottom: '1px solid #e0e0e0' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', color: '#333', margin: 0 },
+  searchContainer: { padding: 15, backgroundColor: '#ffffff', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: '10px' },
+  searchInput: { height: 50, flex: 1, boxSizing: 'border-box', backgroundColor: '#f1f3f5', borderRadius: 10, padding: '0 15px', fontSize: 16, border: '1px solid #dee2e6' },
+  scanButton: { height: 50, width: 50, padding: 10, backgroundColor: '#007BFF', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  listContainer: { padding: 10 },
+  card: { backgroundColor: '#ffffff', borderRadius: 15, padding: 15, marginBottom: 15, display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', cursor: 'pointer' },
+  productImage: { width: 80, height: 80, borderRadius: 10, marginRight: 15 },
+  cardContent: { flex: 1 },
+  productName: { fontSize: 18, fontWeight: 'bold', color: '#333', margin: 0 },
+  productCategory: { fontSize: 14, color: '#6c757d', marginTop: 5, margin: 0 },
+  detailsHeader: { position: 'relative', alignItems: 'center', textAlign: 'center', padding: 20, backgroundColor: '#ffffff', borderBottomLeftRadius: 30, borderBottomRightRadius: 30, marginBottom: 20 },
+  backButton: { position: 'absolute', top: 20, left: 20, background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#007BFF' },
+  detailsImage: { width: 150, height: 150, borderRadius: 75, marginBottom: 20, border: '3px solid #007BFF' },
+  detailsProductName: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', color: '#333', margin: 0 },
+  detailsProductCategory: { fontSize: 16, color: '#6c757d', marginTop: 5, margin: 0 },
+  priceListContainer: { padding: '0 20px' },
+  priceListTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, color: '#333', margin: 0 },
+  priceItem: { backgroundColor: '#ffffff', borderRadius: 10, padding: 15, marginBottom: 10, display: 'flex', alignItems: 'center', border: '1px solid #e9ecef', position: 'relative' },
+  bestPrice: { backgroundColor: '#e6f7ff', borderColor: '#91d5ff', borderWidth: 2 },
+  pharmacyLogo: { width: 40, height: 40, borderRadius: 20, marginRight: 15 },
+  pharmacyInfo: { flex: 1 },
+  pharmacyName: { fontSize: 16, fontWeight: '600', color: '#495057', margin: 0 },
+  priceText: { fontSize: 18, fontWeight: 'bold', color: '#007BFF', margin: 0 },
+  bestPriceLabel: { position: 'absolute', top: -10, right: 10, backgroundColor: '#28a745', color: '#ffffff', padding: '3px 8px', borderRadius: 5, fontSize: 12, fontWeight: 'bold', margin: 0 },
+  scannerOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  scannerContainer: { backgroundColor: 'white', padding: '20px', borderRadius: 15, width: '90%', maxWidth: '600px', textAlign: 'center' },
+  closeScannerButton: { marginTop: 20, padding: '10px 20px', fontSize: 16, borderRadius: 8, border: 'none', backgroundColor: '#dc3545', color: 'white', cursor: 'pointer' },
+  notification: { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', backgroundColor: '#333', color: 'white', padding: '10px 20px', borderRadius: 8, zIndex: 1001, boxShadow: '0 4px 8px rgba(0,0,0,0.2)' },
+};
