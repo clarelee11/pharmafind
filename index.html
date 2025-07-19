@@ -214,7 +214,11 @@ const QRScanner = ({ onScanSuccess, onScanFailure, onClose }) => {
         html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, onScanFailure)
             .catch(err => {
                 console.error("Unable to start scanning.", err);
-                onScanFailure("Failed to start camera. Please grant permission.");
+                if (err && err.name === 'NotAllowedError') {
+                    onScanFailure("Camera permission denied. Please enable it in your browser settings to use the scanner.");
+                } else {
+                    onScanFailure("Failed to start camera. Please try again.");
+                }
             });
         
         readerRef.current = html5QrCode;
